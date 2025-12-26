@@ -115,12 +115,6 @@ class ModelEvaluator:
         df = pd.read_csv(dataset_path)
         print(f"Loaded {len(df)} records")
         
-        # Handle mistake tags
-        if 'mistake_tags' in df.columns and df['mistake_tags'].dtype == 'object':
-            df['num_mistakes'] = df['mistake_tags'].apply(
-                lambda x: len(x.split(',')) if isinstance(x, str) and x else 0
-            )
-        
         # Ensure dataset only uses the features the model was trained on
         # Add any missing features with default values
         for col in self.feature_cols:

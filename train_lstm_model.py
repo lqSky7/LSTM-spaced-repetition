@@ -55,10 +55,9 @@ class DSASequenceDataset(Dataset):
         else:
             # Auto-detect feature columns
             self.feature_cols = [
-                'difficulty', 'category', 'concept_count', 
+                'difficulty', 'category', 
                 'attempt_number', 'days_since_last_attempt',
-                'num_tries', 'time_spent_minutes', 'num_mistakes',
-                'cumulative_success_rate'
+                'num_tries', 'time_spent_minutes'
             ]
 
             # Add optional features if they exist
@@ -428,12 +427,6 @@ def main():
     print(f"\nLoading dataset...")
     df = pd.read_csv(args.dataset)
     print(f"Loaded {len(df)} records")
-
-    # Handle mistake tags - convert to count if string
-    if 'mistake_tags' in df.columns and df['mistake_tags'].dtype == 'object':
-        df['num_mistakes'] = df['mistake_tags'].apply(
-            lambda x: len(x.split(',')) if isinstance(x, str) and x else 0
-        )
 
     # Split data
     train_df, test_df = train_test_split(df, test_size=0.15, random_state=args.seed)

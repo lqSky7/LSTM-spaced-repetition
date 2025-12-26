@@ -46,27 +46,20 @@ python evaluate_model.py \
 ## Results
 
 Performance on real dataset (15,321 records):
-- MAE: 1.59 days
-- RMSE: 2.43 days
-- MAPE: 35.5%
+- MAE: 0.15 days
+- RMSE: 2.17 days
 
 Performance on synthetic dataset (26,273 records):
-- MAE: 1.17 days
-- RMSE: 7.09 days
-- MAPE: 27.7%
+- MAE: 0.10 days
+- RMSE: 1.21 days
+- MAPE: 0.71%
 
 K-means clustering identifies 5 distinct learner-problem patterns with varying difficulty levels.
 
 ### Visualization
 
-![Real Dataset Evaluation](results/plots/Dsa%20Spaced%20Repetition%20Dataset_evaluation_20251226_124140.png)
-*Real dataset: Predictions vs actuals, error distribution, and cluster analysis*
-
-![Synthetic Dataset Evaluation](results/plots/Dsa%20Synthetic%20Dataset_evaluation_20251226_124140.png)
-*Synthetic dataset: Model generalizes well to different data distributions*
-
-![Dataset Comparison](results/plots/dataset_comparison_20251226_124140.png)
-*Comparison: Model performance across datasets*
+![Synthetic Dataset Evaluation](results/plots/Dsa%20Synthetic%20Dataset_evaluation_20251226_164737.png)
+*Synthetic dataset: Model predictions with updated feature set*
 
 ## Model Verification
 
@@ -80,13 +73,11 @@ Silhouette scores of 0.19-0.22 confirm meaningful cluster separation. The cluste
 
 ## Features
 
-The model uses 9 input features per review:
-- Problem difficulty and category
-- Concept count
+The model uses 9 input features per review (optimized for practical Chrome extension tracking):
+- Problem difficulty (0=Easy, 1=Medium, 2=Hard) and category
 - Attempt number and days since last attempt
-- Number of tries and time spent
-- Number of mistakes
-- Cumulative success rate
+- Number of tries and time spent (minutes)
+- Optional: time complexity class, code lines, success streak
 
 ## Requirements
 

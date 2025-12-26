@@ -1,0 +1,5 @@
+.venv/*
+dsa_synthetic_dataset.csv
+dsa_spaced_repetition_dataset.csv
+models/*
+results/metrics/*

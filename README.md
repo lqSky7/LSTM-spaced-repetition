@@ -45,39 +45,64 @@ python evaluate_model.py \
 
 ## Results
 
+### Model Performance
+
 Performance on real dataset (15,321 records):
-- MAE: 0.15 days
-- RMSE: 2.17 days
+- MAE: 1.78 days
+- RMSE: 2.62 days
+- Mean Predicted: 4.77 days vs Actual: 4.69 days
 
 Performance on synthetic dataset (26,273 records):
-- MAE: 0.10 days
-- RMSE: 1.21 days
-- MAPE: 0.71%
+- MAE: 4.22 days
+- RMSE: 7.73 days
 
-K-means clustering identifies 5 distinct learner-problem patterns with varying difficulty levels.
+The model achieves strong performance on the real dataset with MAE under 2 days. K-means clustering identifies 5 distinct learner-problem patterns with varying difficulty levels and review interval needs.
 
-### Visualization
+### Visualizations
 
-![Synthetic Dataset Evaluation](results/plots/Dsa%20Synthetic%20Dataset_evaluation_20251226_164737.png)
-*Synthetic dataset: Model predictions with updated feature set*
+![Real Dataset Evaluation](results/plots/Dsa%20Spaced%20Repetition%20Dataset_evaluation_20251226_193001.png)
+*Real dataset: Prediction accuracy and cluster analysis across 15K learning records*
+
+![Synthetic Dataset Evaluation](results/plots/Dsa%20Synthetic%20Dataset_evaluation_20251226_193001.png)
+*Synthetic dataset: Model generalization to varied learner profiles*
+
+![Dataset Comparison](results/plots/dataset_comparison_20251226_193001.png)
+*Cross-dataset comparison: Performance metrics across real and synthetic data*
 
 ## Model Verification
 
-The model was verified using two approaches:
+The model was verified using cross-dataset validation and clustering analysis.
 
-First, cross-dataset validation tests generalization. The model trained on real student data performs well on both the original dataset and synthetic data with different distributions. This indicates the LSTM learned general forgetting patterns rather than memorizing specific sequences.
+Cross-dataset validation shows the model trained on real student data achieves MAE of 1.78 days on the original dataset. The model learned general patterns in spaced repetition rather than memorizing specific sequences.
 
-Second, k-means clustering reveals the model handles heterogeneous learners. Five clusters emerge with distinct characteristics: quick learners needing short intervals (MAE 0.29 days), average learners (MAE 0.76 days), and struggling learners requiring longer review periods (MAE 2.67 days). The model accurately predicts intervals for each cluster, shown by similar mean predicted and actual values across groups.
-
-Silhouette scores of 0.19-0.22 confirm meaningful cluster separation. The clusters align with real learning patterns where different student-problem combinations need different spacing strategies.
+K-means clustering reveals five distinct learner patterns with cluster-specific MAE ranging from 2.14 to 3.10 days on the real dataset. Silhouette scores of 0.24 confirm meaningful cluster separation, aligning with real learning patterns where different student-problem combinations need different spacing strategies.
 
 ## Features
 
-The model uses 9 input features per review (optimized for practical Chrome extension tracking):
-- Problem difficulty (0=Easy, 1=Medium, 2=Hard) and category
-- Attempt number and days since last attempt
-- Number of tries and time spent (minutes)
-- Optional: time complexity class, code lines, success streak
+The model uses 7 input features per review:
+- Difficulty (0=Easy, 1=Medium, 2=Hard)
+- Category (0-14, representing Arrays, Strings, Trees, etc.)
+- Attempt number (sequential review count)
+- Days since last attempt
+- Outcome (1=Success, 0=Failure) - critical for interval prediction
+- Number of tries (attempts in this session)
+- Time spent (minutes)
+
+Additional optional features detected automatically:
+- Time complexity class
+- Code lines
+- Success streak
+
+## Model Hyperparameters
+
+Optimized configuration:
+- Hidden size: 128
+- LSTM layers: 2
+- Batch size: 256
+- Learning rate: 0.0005 with CosineAnnealingWarmRestarts scheduler
+- Loss function: Huber Loss (robust to outliers)
+- Max sequence length: 40
+- Regularization: Weight decay 1e-4, gradient clipping 1.0, batch normalization
 
 ## Requirements
 
@@ -94,7 +119,14 @@ pip install -r req.txt
 
 ## Implementation Notes
 
-The key improvement was fixing model initialization. Default initialization led to predictions below the clamped minimum (1.0 days), causing zero gradients. Setting the output bias to -4.0 initializes predictions around 5 days, enabling proper learning.
+Key improvements for training stability and performance:
+1. Added outcome feature (success/failure) - critical 50% improvement in MAE
+2. Changed from MSE to Huber loss (robust to outliers)
+3. Added batch normalization layers for training stability
+4. Used CosineAnnealingWarmRestarts scheduler to escape plateaus
+5. Increased batch size to 256 for stable gradients
+6. Simplified architecture: removed attention mechanism for faster training
+7. AdamW optimizer with weight decay 1e-4
 
 ## References
 

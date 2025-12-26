@@ -57,6 +57,7 @@ class DSASequenceDataset(Dataset):
             self.feature_cols = [
                 'difficulty', 'category', 
                 'attempt_number', 'days_since_last_attempt',
+                'outcome',  # SUCCESS/FAILURE - critical for interval prediction!
                 'num_tries', 'time_spent_minutes'
             ]
 
@@ -145,10 +146,28 @@ class DSASequenceDataset(Dataset):
         )
 
 
-class StandardLSTM(nn.Module):
-    """Standard LSTM model for sequence prediction"""
+class Attention(nn.Module):
+    """Attention mechanism to focus on important parts of sequence"""
+    
+    def __init__(self, hidden_size):
+        super(Attention, self).__init__()
+        self.attention = nn.Linear(hidden_size, 1)
+    
+    def forward(self, lstm_output):
+        # lstm_output shape: (batch, seq_len, hidden_size)
+        # Compute attention scores
+        scores = self.attention(lstm_output)  # (batch, seq_len, 1)
+        weights = torch.softmax(scores, dim=1)  # (batch, seq_len, 1)
+        
+        # Apply attention weights
+        context = torch.sum(weights * lstm_output, dim=1)  # (batch, hidden_size)
+        return context, weights
 
-    def __init__(self, input_size, hidden_size=256, num_layers=1, dropout=0.2):
+
+class StandardLSTM(nn.Module):
+    """Simplified LSTM model for sequence prediction"""
+
+    def __init__(self, input_size, hidden_size=128, num_layers=2, dropout=0.2):
         super(StandardLSTM, self).__init__()
 
         self.hidden_size = hidden_size
@@ -161,36 +180,45 @@ class StandardLSTM(nn.Module):
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0
         )
-
+        
+        # Simpler FC network with batch norm
         self.fc = nn.Sequential(
             nn.Linear(hidden_size, 64),
+            nn.BatchNorm1d(64),
             nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(64, 1),
-            nn.Sigmoid()  # Output probability or normalized interval
+            nn.Dropout(0.2),
+            nn.Linear(64, 32),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.Linear(32, 1)
         )
+        
+        # Initialize to predict around mean interval (4.7 days)
+        self.fc[-1].bias.data.fill_(4.7)
 
     def forward(self, x):
         # x shape: (batch, seq_len, features)
         lstm_out, (h_n, c_n) = self.lstm(x)
+        
+        # Use last hidden state
+        last_hidden = lstm_out[:, -1, :]
 
         # Use last hidden state
         last_hidden = lstm_out[:, -1, :]
 
-        # Predict interval (scaled 0-1, will be denormalized)
-        output = self.fc(last_hidden) * 100  # Scale to days
+        # Predict interval directly
+        output = self.fc(last_hidden)
+        
+        # Clamp to reasonable range (1-90 days)
+        output = torch.clamp(output, min=1.0, max=90.0)
 
         return output
 
 
 class LSTMWithExponentialDecay(nn.Module):
-    """
-    LSTM with exponential decay constraint as in SuperMemo paper.
-    Models recall probability: p(t) = exp(-exp(o(x)) * t)
-    where o(x) is LSTM output and t is lag time.
-    """
+    """Simplified LSTM with exponential decay"""
 
-    def __init__(self, input_size, hidden_size=256, num_layers=1, dropout=0.2):
+    def __init__(self, input_size, hidden_size=128, num_layers=2, dropout=0.2):
         super(LSTMWithExponentialDecay, self).__init__()
 
         self.hidden_size = hidden_size
@@ -207,15 +235,20 @@ class LSTMWithExponentialDecay(nn.Module):
         # Output layer predicts decay rate parameter
         self.fc = nn.Sequential(
             nn.Linear(hidden_size, 64),
+            nn.BatchNorm1d(64),
             nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(64, 1)  # Outputs o(x) for exponential decay
+            nn.Dropout(0.2),
+            nn.Linear(64, 32),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.Linear(32, 1)
         )
+        
+        # Learnable target recall probability (starts at 0.9)
+        self.log_target_recall = nn.Parameter(torch.tensor([-0.10536]))  # log(0.9)
 
-        # Initialize bias to start with reasonable intervals (~5 days)
-        # This prevents starting in the clamped region (< 1.0) where gradients are zero
-        # interval = -log(0.9) / exp(bias) -> bias = ln(-log(0.9)/5) ≈ -3.86
-        self.fc[3].bias.data.fill_(-4.0)
+        # Initialize bias
+        self.fc[-1].bias.data.fill_(-3.70)
 
     def forward(self, x, lag_times=None):
         """
@@ -234,9 +267,9 @@ class LSTMWithExponentialDecay(nn.Module):
 
         # Convert to review interval using exponential decay inverse
         # For training: predict interval directly from decay parameter
-        # interval = -log(0.9) / exp(o(x)) where 0.9 is target recall
-        target_recall = 0.9
-        intervals = -torch.log(torch.tensor(target_recall)) / torch.exp(decay_param)
+        # interval = -log(target_recall) / exp(o(x))
+        target_recall = torch.exp(self.log_target_recall)
+        intervals = -torch.log(target_recall) / torch.exp(decay_param)
 
         # Clamp to reasonable range (1-90 days)
         intervals = torch.clamp(intervals, min=1.0, max=90.0)
@@ -266,7 +299,7 @@ def macro_avg_mae(predictions, targets, outcomes):
 
 
 def train_model(model, train_loader, val_loader, criterion, optimizer, 
-                num_epochs=50, device='cpu', model_name='model'):
+                num_epochs=50, device='cpu', model_name='model', scheduler=None):
     """Train the LSTM model"""
 
     print(f"\nTraining {model_name}...")
@@ -320,6 +353,10 @@ def train_model(model, train_loader, val_loader, criterion, optimizer,
 
         val_loss /= len(val_loader)
         val_losses.append(val_loss)
+        
+        # Update learning rate (CosineAnnealing updates every epoch)
+        if scheduler is not None:
+            scheduler.step()
 
         # Save best model
         if val_loss < best_val_loss:
@@ -382,12 +419,12 @@ def main():
     parser.add_argument('--model-type', type=str, default='standard',
                        choices=['standard', 'exp-decay'],
                        help='Model type: standard or exp-decay (default: standard)')
-    parser.add_argument('--hidden-size', type=int, default=256,
-                       help='LSTM hidden size (default: 256)')
-    parser.add_argument('--num-layers', type=int, default=1,
-                       help='Number of LSTM layers (default: 1)')
-    parser.add_argument('--batch-size', type=int, default=64,
-                       help='Batch size (default: 64)')
+    parser.add_argument('--hidden-size', type=int, default=128,
+                       help='LSTM hidden size (default: 128)')
+    parser.add_argument('--num-layers', type=int, default=2,
+                       help='Number of LSTM layers (default: 2)')
+    parser.add_argument('--batch-size', type=int, default=256,
+                       help='Batch size (default: 256)')
     parser.add_argument('--epochs', type=int, default=50,
                        help='Number of epochs (default: 50)')
     parser.add_argument('--lr', type=float, default=0.001,
@@ -481,14 +518,20 @@ def main():
     print(f"\nModel: {model_name}")
     print(f"Total parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-    # Define loss and optimizer
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-5)
+    # Define loss and optimizer (Huber loss is robust to outliers)
+    criterion = nn.HuberLoss(delta=1.0)  # Smooth L1 loss
+    optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    
+    # Cosine annealing with warm restarts - better for escaping plateaus
+    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=10, T_mult=2, eta_min=1e-6
+    )
 
     # Train model
     model, train_losses, val_losses = train_model(
         model, train_loader, val_loader, criterion, optimizer,
-        num_epochs=args.epochs, device=device, model_name=model_name
+        num_epochs=args.epochs, device=device, model_name=model_name,
+        scheduler=scheduler
     )
 
     # Evaluate on test set

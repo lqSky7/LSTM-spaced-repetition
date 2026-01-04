@@ -20,11 +20,11 @@ LSTM-spaced-repetition/
 
 If you use this dataset, please cite it as:
 
-Singh, D. (2025). *DSA spaced repetition* [Data set]. Kaggle. https://www.kaggle.com/datasets/ca5qee1/dsa-spaced-repetition/data
+Diljot Singh. (2026). DSA spaced repetition [Data set]. Kaggle. https://doi.org/10.34740/KAGGLE/DS/9183578
 
 The corresponding project repository can be cited as:
 
-Singh, D. (2025). *LSTM-spaced-repetition* [Source code]. GitHub. https://github.com/lqSky7/LSTM-spaced-repetition
+Diljot Singh (2026). LSTM-spaced-repetition [Source code]. GitHub. https://github.com/lqSky7/LSTM-spaced-repetition
 
 
 ## Model Architecture

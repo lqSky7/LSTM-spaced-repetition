@@ -21,6 +21,16 @@ LSTM-spaced-repetition/
 ├── FORMULA_EXPLAINED.md           # Technical details
 └── VARIANT_ANALYSIS.md            # Research analysis
 ```
+## Dataset
+
+If you use this dataset, please cite it as:
+
+Diljot Singh. (2026). DSA spaced repetition [Data set]. Kaggle. https://doi.org/10.34740/KAGGLE/DS/9183578
+
+The corresponding project repository can be cited as:
+
+Diljot Singh (2026). LSTM-spaced-repetition [Source code]. GitHub. https://github.com/lqSky7/LSTM-spaced-repetition
+
 
 ## Model Architecture
 

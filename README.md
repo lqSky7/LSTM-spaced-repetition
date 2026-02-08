@@ -7,19 +7,25 @@ A machine learning system that predicts optimal review intervals for data struct
 ```
 LSTM-spaced-repetition/
 ├── train_lstm_model.py           # Train LSTM models
+├── train_variants.py              # Train 5 formula variants
 ├── evaluate_model.py              # Evaluate with k-means clustering
 ├── generate_dsa_dataset.py        # Generate synthetic data
 ├── dsa_spaced_repetition_dataset.csv    # Real learning data
 ├── dsa_synthetic_dataset.csv            # Synthetic learning data
 ├── models/                        # Saved model checkpoints
-└── results/
-    ├── metrics/                   # JSON and CSV results
-    └── plots/                     # Visualizations
+├── variant_results/               # Variant comparison plots
+├── results/
+│   ├── metrics/                   # JSON and CSV results
+│   └── plots/                     # Visualizations
+├── SIMPLE_EXPLANATION.md          # Formula variants explained
+├── FORMULA_EXPLAINED.md           # Technical details
+└── VARIANT_ANALYSIS.md            # Research analysis
 ```
 
 ## Model Architecture
 
 Two LSTM variants:
+
 - Standard LSTM: Basic sequence prediction
 - LSTM with Exponential Decay: Models forgetting curves (better performance)
 
@@ -27,15 +33,37 @@ The exponential decay model uses: `interval = -log(0.9) / exp(LSTM_output)`
 
 This follows the spaced repetition literature where recall probability decays exponentially over time.
 
+### Formula Variants
+
+Five variations of the forgetting curve formula were tested:
+
+| Variant | Formula | MAE (days) | Notes |
+|---------|---------|-----------|-------|
+| V1: Original | `-log(R) / exp(o(x))` | 1.66 | Baseline |
+| V2: Power Law | `-log(R) / (exp(o(x)))^α` | 1.65 | Learnable exponent |
+| V3: Linear | `-log(R) / (a*o(x) + b)` | 3.69 | Failed - exponential is essential |
+| V4: Sigmoid Mod | `-log(R) / (exp(o(x)) * sigmoid(β*o(x)))` | 1.61 | Best validation loss |
+| V5: Adaptive Target | `-log(R(x)) / exp(o(x))` | 1.57 | Best - personalized target recall |
+
+V5 (Adaptive Target) achieves 5.4% improvement by predicting personalized target recall probabilities (0.7-0.95) instead of using a fixed 0.9 for all learners. See `SIMPLE_EXPLANATION.md` for detailed breakdown.
+
 ## Quick Start
 
 Train a model:
+
 ```bash
 source .venv/bin/activate
 python train_lstm_model.py --dataset dsa_spaced_repetition_dataset.csv --model-type exp-decay --epochs 50
 ```
 
+Train all 5 formula variants:
+
+```bash
+python train_variants.py --dataset dsa_spaced_repetition_dataset.csv --epochs 50
+```
+
 Evaluate on both datasets:
+
 ```bash
 python evaluate_model.py \
     --model models/exp-decay_lstm_TIMESTAMP.pt \
@@ -48,11 +76,13 @@ python evaluate_model.py \
 ### Model Performance
 
 Performance on real dataset (15,321 records):
+
 - MAE: 1.78 days
 - RMSE: 2.62 days
 - Mean Predicted: 4.77 days vs Actual: 4.69 days
 
 Performance on synthetic dataset (26,273 records):
+
 - MAE: 4.22 days
 - RMSE: 7.73 days
 
@@ -61,13 +91,13 @@ The model achieves strong performance on the real dataset with MAE under 2 days.
 ### Visualizations
 
 ![Real Dataset Evaluation](results/plots/Dsa%20Spaced%20Repetition%20Dataset_evaluation_20251226_193001.png)
-*Real dataset: Prediction accuracy and cluster analysis across 15K learning records*
+_Real dataset: Prediction accuracy and cluster analysis across 15K learning records_
 
 ![Synthetic Dataset Evaluation](results/plots/Dsa%20Synthetic%20Dataset_evaluation_20251226_193001.png)
-*Synthetic dataset: Model generalization to varied learner profiles*
+_Synthetic dataset: Model generalization to varied learner profiles_
 
 ![Dataset Comparison](results/plots/dataset_comparison_20251226_193001.png)
-*Cross-dataset comparison: Performance metrics across real and synthetic data*
+_Cross-dataset comparison: Performance metrics across real and synthetic data_
 
 ## Model Verification
 
@@ -80,6 +110,7 @@ K-means clustering reveals five distinct learner patterns with cluster-specific 
 ## Features
 
 The model uses 7 input features per review:
+
 - Difficulty (0=Easy, 1=Medium, 2=Hard)
 - Category (0-14, representing Arrays, Strings, Trees, etc.)
 - Attempt number (sequential review count)
@@ -89,6 +120,7 @@ The model uses 7 input features per review:
 - Time spent (minutes)
 
 Additional optional features detected automatically:
+
 - Time complexity class
 - Code lines
 - Success streak
@@ -96,6 +128,7 @@ Additional optional features detected automatically:
 ## Model Hyperparameters
 
 Optimized configuration:
+
 - Hidden size: 128
 - LSTM layers: 2
 - Batch size: 256
@@ -113,6 +146,7 @@ Optimized configuration:
 - matplotlib, seaborn
 
 Install dependencies:
+
 ```bash
 pip install -r req.txt
 ```
@@ -120,6 +154,7 @@ pip install -r req.txt
 ## Implementation Notes
 
 Key improvements for training stability and performance:
+
 1. Added outcome feature (success/failure) - critical 50% improvement in MAE
 2. Changed from MSE to Huber loss (robust to outliers)
 3. Added batch normalization layers for training stability
